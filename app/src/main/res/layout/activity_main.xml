@@ -3,7 +3,77 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="12dp">
+    android:background="@color/jarvis_bg"
+    android:padding="16dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="8dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="J.A.R.V.I.S"
+            android:textColor="@color/jarvis_cyan"
+            android:textSize="26sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.15"
+            android:fontFamily="monospace" />
+
+        <TextView
+            android:id="@+id/clockText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/jarvis_text_dim"
+            android:textSize="14sp"
+            android:fontFamily="monospace"
+            android:text="00:00:00" />
+    </LinearLayout>
+
+    <com.example.jarvis.StatusRingView
+        android:id="@+id/statusRing"
+        android:layout_width="match_parent"
+        android:layout_height="260dp" />
+
+    <TextView
+        android:id="@+id/statusLabel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:text="STANDBY"
+        android:textColor="@color/jarvis_cyan"
+        android:textStyle="bold"
+        android:textSize="16sp"
+        android:letterSpacing="0.2"
+        android:fontFamily="monospace"
+        android:layout_marginBottom="12dp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:background="@color/jarvis_bg_panel"
+        android:padding="10dp"
+        android:layout_marginBottom="10dp">
+
+        <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <TextView
+                android:id="@+id/chatLog"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="@color/jarvis_text"
+                android:textSize="14sp"
+                android:fontFamily="monospace"
+                android:lineSpacingExtra="4dp" />
+        </ScrollView>
+    </LinearLayout>
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -11,64 +81,74 @@
         android:orientation="horizontal"
         android:layout_marginBottom="8dp">
 
-        <EditText
-            android:id="@+id/apiKeyInput"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:hint="Paste your Anthropic API key here"
-            android:inputType="textPassword" />
-
         <Button
-            android:id="@+id/saveKeyButton"
+            android:id="@+id/micButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Save" />
-    </LinearLayout>
-
-    <ScrollView
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1">
-
-        <TextView
-            android:id="@+id/chatLog"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:textSize="16sp" />
-    </ScrollView>
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginTop="8dp">
+            android:text="MIC"
+            android:textColor="#FFFFFF"
+            android:backgroundTint="@color/jarvis_mic"
+            android:fontFamily="monospace" />
 
         <EditText
             android:id="@+id/messageInput"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:hint="Type a message" />
-
-        <Button
-            android:id="@+id/micButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="🎤" />
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="8dp"
+            android:hint="&gt; enter command"
+            android:textColorHint="@color/jarvis_text_dim"
+            android:textColor="@color/jarvis_text"
+            android:background="@color/jarvis_bg_panel"
+            android:fontFamily="monospace"
+            android:padding="10dp" />
 
         <Button
             android:id="@+id/sendButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Send" />
+            android:text="SEND"
+            android:textColor="#FFFFFF"
+            android:backgroundTint="@color/jarvis_cyan_dim"
+            android:fontFamily="monospace" />
     </LinearLayout>
 
-    <Button
-        android:id="@+id/stopButton"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:text="Stop Speaking" />
+        android:orientation="horizontal">
+
+        <EditText
+            android:id="@+id/apiKeyInput"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:hint="API key"
+            android:inputType="textPassword"
+            android:textColorHint="@color/jarvis_text_dim"
+            android:textColor="@color/jarvis_text"
+            android:background="@color/jarvis_bg_panel"
+            android:fontFamily="monospace"
+            android:padding="8dp" />
+
+        <Button
+            android:id="@+id/saveKeyButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="SAVE"
+            android:textColor="#FFFFFF"
+            android:backgroundTint="@color/jarvis_cyan_dim"
+            android:fontFamily="monospace" />
+
+        <Button
+            android:id="@+id/stopButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="STOP"
+            android:textColor="#FFFFFF"
+            android:backgroundTint="#333333"
+            android:fontFamily="monospace" />
+    </LinearLayout>
 
 </LinearLayout>
