@@ -29,7 +29,6 @@ class ApiHelper {
     }
 
     fun getNews(apiKey: String): String {
-        if (apiKey.isBlank()) return "Please save a news API key in Settings first, Sir."
         return try {
             val url = "https://newsapi.org/v2/top-headlines?country=in&pageSize=5&apiKey=$apiKey"
             val request = Request.Builder().url(url).build()
@@ -68,4 +67,4 @@ class ApiHelper {
             null
         }
     }
-} pp
+}
