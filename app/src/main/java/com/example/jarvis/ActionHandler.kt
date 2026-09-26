@@ -101,4 +101,35 @@ class ActionHandler(private val context: Context) {
         intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
         context.startActivity(intent)
     }
+
+    fun playSpotify(query: String) {
+        try {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("spotify:search:" + Uri.encode(query)))
+            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            openUrl("https://open.spotify.com/search/" + Uri.encode(query))
+        }
+    }
+
+    fun playYoutubeVideo(videoId: String) {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=$videoId"))
+        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        context.startActivity(intent)
+    }
+
+    fun openYoutubeSearch(query: String) {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/results?search_query=" + Uri.encode(query)))
+        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        context.startActivity(intent)
+    }
+
+    fun openMapsDirections(destination: String, origin: String? = null) {
+        val base = "https://www.google.com/maps/dir/?api=1"
+        val originParam = if (origin != null) "&origin=" + Uri.encode(origin) else ""
+        val destParam = "&destination=" + Uri.encode(destination)
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(base + originParam + destParam))
+        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        context.startActivity(intent)
+    }
 }
