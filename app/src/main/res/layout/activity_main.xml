@@ -31,13 +31,22 @@
             android:textColor="@color/jarvis_text_dim"
             android:textSize="14sp"
             android:fontFamily="monospace"
-            android:text="00:00:00" />
+            android:text="00:00:00"
+            android:layout_marginEnd="10dp" />
+
+        <Button
+            android:id="@+id/settingsButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="⚙"
+            android:textColor="@color/jarvis_cyan"
+            android:backgroundTint="@color/jarvis_bg_panel" />
     </LinearLayout>
 
     <com.example.jarvis.StatusRingView
         android:id="@+id/statusRing"
         android:layout_width="match_parent"
-        android:layout_height="260dp" />
+        android:layout_height="220dp" />
 
     <TextView
         android:id="@+id/statusLabel"
@@ -50,7 +59,63 @@
         android:textSize="16sp"
         android:letterSpacing="0.2"
         android:fontFamily="monospace"
-        android:layout_marginBottom="12dp" />
+        android:layout_marginBottom="8dp" />
+
+    <LinearLayout
+        android:id="@+id/settingsPanel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@color/jarvis_bg_panel"
+        android:padding="8dp"
+        android:visibility="gone"
+        android:layout_marginBottom="8dp">
+
+        <EditText
+            android:id="@+id/cityInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Your city (weather)"
+            android:textColorHint="@color/jarvis_text_dim"
+            android:textColor="@color/jarvis_text"
+            android:fontFamily="monospace" />
+
+        <EditText
+            android:id="@+id/youtubeKeyInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="YouTube API key"
+            android:textColorHint="@color/jarvis_text_dim"
+            android:textColor="@color/jarvis_text"
+            android:fontFamily="monospace" />
+
+        <EditText
+            android:id="@+id/weatherKeyInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Weather API key"
+            android:textColorHint="@color/jarvis_text_dim"
+            android:textColor="@color/jarvis_text"
+            android:fontFamily="monospace" />
+
+        <EditText
+            android:id="@+id/newsKeyInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="News API key"
+            android:textColorHint="@color/jarvis_text_dim"
+            android:textColor="@color/jarvis_text"
+            android:fontFamily="monospace" />
+
+        <Button
+            android:id="@+id/saveSettingsButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="SAVE SETTINGS"
+            android:textColor="#FFFFFF"
+            android:backgroundTint="@color/jarvis_cyan_dim"
+            android:fontFamily="monospace" />
+    </LinearLayout>
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -124,7 +189,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:hint="API key"
+            android:hint="Claude API key"
             android:inputType="textPassword"
             android:textColorHint="@color/jarvis_text_dim"
             android:textColor="@color/jarvis_text"
