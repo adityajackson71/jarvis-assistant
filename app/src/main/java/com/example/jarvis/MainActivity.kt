@@ -9,6 +9,7 @@ import android.os.Looper
 import android.speech.RecognizerIntent
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -34,6 +35,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private lateinit var binding: ActivityMainBinding
     private lateinit var tts: TextToSpeech
     private lateinit var actionHandler: ActionHandler
+    private lateinit var apiHelper: ApiHelper
     private val client = OkHttpClient()
     private val prefs by lazy { getSharedPreferences("jarvis_prefs", MODE_PRIVATE) }
     private val conversation = JSONArray()
@@ -80,6 +82,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         actionHandler = ActionHandler(this)
+        apiHelper = ApiHelper()
 
         tts = TextToSpeech(this, this)
         tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
@@ -104,6 +107,25 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         })
 
         binding.apiKeyInput.setText(prefs.getString("api_key", ""))
+        binding.cityInput.setText(prefs.getString("city", ""))
+        binding.youtubeKeyInput.setText(prefs.getString("youtube_key", ""))
+        binding.weatherKeyInput.setText(prefs.getString("weather_key", ""))
+        binding.newsKeyInput.setText(prefs.getString("news_key", ""))
+
+        binding.settingsButton.setOnClickListener {
+            binding.settingsPanel.visibility =
+                if (binding.settingsPanel.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+        }
+
+        binding.saveSettingsButton.setOnClickListener {
+            prefs.edit()
+                .putString("city", binding.cityInput.text.toString().trim())
+                .putString("youtube_key", binding.youtubeKeyInput.text.toString().trim())
+                .putString("weather_key", binding.weatherKeyInput.text.toString().trim())
+                .putString("news_key", binding.newsKeyInput.text.toString().trim())
+                .apply()
+            Toast.makeText(this, "Settings saved", Toast.LENGTH_SHORT).show()
+        }
 
         binding.saveKeyButton.setOnClickListener {
             val key = binding.apiKeyInput.text.toString().trim()
@@ -187,10 +209,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 speak("Cancelled, Sir.")
                 return
             }
-            pendingConfirmation = null // fall through, treat as new command
+            pendingConfirmation = null
         }
 
-        if (!hasPhonePermissions() && (lower.startsWith("call ") || lower.contains("send") && lower.contains("saying") || lower.contains("message"))) {
+        if (!hasPhonePermissions() && (lower.startsWith("call ") || (lower.contains("send") && lower.contains("saying")) || lower.contains("message"))) {
             pendingPermissionRetryText = text
             phonePermissionsLauncher.launch(
                 arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.CALL_PHONE, Manifest.permission.SEND_SMS)
@@ -278,6 +300,72 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             }
         }
 
+        // Music: YouTube (auto-play first result)
+        Regex("^play (.+?) (?:on|in) youtube$").find(lower)?.let { match ->
+            val query = match.groupValues[1].trim()
+            playOnYoutube(query)
+            return true
+        }
+        Regex("^search(?: on)? youtube(?: for)? (.+)$").find(lower)?.let { match ->
+            playOnYoutube(match.groupValues[1].trim())
+            return true
+        }
+
+        // Music: default Spotify
+        Regex("^play (.+)$").find(lower)?.let { match ->
+            val query = match.groupValues[1].trim()
+            actionHandler.playSpotify(query)
+            appendToChat("JARVIS", "Opening Spotify for $query, Sir.")
+            speak("Opening Spotify.")
+            return true
+        }
+
+        // Weather
+        if (Regex("^(?:what'?s the )?weather(?: today)?$").matches(lower)) {
+            val city = prefs.getString("city", "") ?: ""
+            val key = prefs.getString("weather_key", "") ?: ""
+            if (city.isBlank()) {
+                appendToChat("JARVIS", "Please set your city in Settings (⚙) first, Sir.")
+                return true
+            }
+            CoroutineScope(Dispatchers.Main).launch {
+                val reply = withContext(Dispatchers.IO) { apiHelper.getWeather(city, key) }
+                appendToChat("JARVIS", reply)
+                speak(reply)
+            }
+            return true
+        }
+
+        // News
+        if (Regex("^(?:check |get |what'?s the )?news$").matches(lower)) {
+            val key = prefs.getString("news_key", "") ?: ""
+            CoroutineScope(Dispatchers.Main).launch {
+                val reply = withContext(Dispatchers.IO) { apiHelper.getNews(key) }
+                appendToChat("JARVIS", reply)
+                speak("Here are today's top headlines, Sir.")
+            }
+            return true
+        }
+
+        // Time
+        if (Regex("^what(?:'s| is) the time$").matches(lower)) {
+            val fmt = SimpleDateFormat("h:mm a", Locale.getDefault())
+            val reply = "It's ${fmt.format(Date())}, Sir."
+            appendToChat("JARVIS", reply)
+            speak(reply)
+            return true
+        }
+
+        // Distance / directions
+        Regex("^(?:distance|directions)(?: from (.+?))? to (.+)$").find(lower)?.let { match ->
+            val origin = match.groupValues[1].ifBlank { null }
+            val destination = match.groupValues[2].trim()
+            actionHandler.openMapsDirections(destination, origin)
+            appendToChat("JARVIS", "Opening directions to $destination, Sir.")
+            speak("Opening directions in Maps.")
+            return true
+        }
+
         // Open website
         Regex("^(?:open website|go to|open) (https?://\\S+|\\S+\\.(?:com|org|net|in)\\S*)$").find(lower)?.let { match ->
             actionHandler.openUrl(match.groupValues[1])
@@ -311,12 +399,36 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         return false
     }
 
+    private fun playOnYoutube(query: String) {
+        val key = prefs.getString("youtube_key", "") ?: ""
+        if (key.isBlank()) {
+            actionHandler.openYoutubeSearch(query)
+            appendToChat("JARVIS", "Opening YouTube search for $query, Sir. Add a YouTube API key in Settings for auto-play.")
+            speak("Opening YouTube search.")
+            return
+        }
+        CoroutineScope(Dispatchers.Main).launch {
+            binding.statusRing.setState(StatusRingView.State.THINKING)
+            val videoId = withContext(Dispatchers.IO) { apiHelper.searchYoutubeVideoId(query, key) }
+            binding.statusRing.setState(StatusRingView.State.IDLE)
+            if (videoId != null) {
+                actionHandler.playYoutubeVideo(videoId)
+                appendToChat("JARVIS", "Playing $query on YouTube, Sir.")
+                speak("Playing it now.")
+            } else {
+                actionHandler.openYoutubeSearch(query)
+                appendToChat("JARVIS", "Couldn't auto-play, opened search results instead, Sir.")
+                speak("Opening YouTube search instead.")
+            }
+        }
+    }
+
     // ---------- LLM chat ----------
 
     private fun sendToClaude(userText: String) {
         val apiKey = prefs.getString("api_key", "") ?: ""
         if (apiKey.isBlank()) {
-            appendToChat("JARVIS", "Please paste and save your API key first.")
+            appendToChat("JARVIS", "Please paste and save your Claude API key first.")
             return
         }
 
@@ -341,7 +453,14 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             val bodyJson = JSONObject().apply {
                 put("model", "claude-sonnet-5")
                 put("max_tokens", 1024)
-                put("system", "You are JARVIS, a calm, precise, slightly witty personal AI assistant, in the style of Tony Stark's assistant. Address the user as 'Sir' unless told otherwise. Keep spoken replies concise and natural, like a real conversation.")
+                put(
+                    "system",
+                    "You are JARVIS, a calm, precise, slightly witty personal AI assistant, in the style of " +
+                        "Tony Stark's assistant. Address the user as 'Sir' unless told otherwise. Keep spoken " +
+                        "replies concise and natural, like a real conversation. You can also thoughtfully " +
+                        "discuss business ideas and general advice when asked, since the user's father may " +
+                        "use you for that too."
+                )
                 put("messages", messagesArray)
             }
 
@@ -377,6 +496,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
             tts.language = Locale.getDefault()
+            tts.setPitch(0.85f)
+            tts.setSpeechRate(1.0f)
             val greeting = "${greetingByTime()} Systems online. I am JARVIS."
             appendToChat("JARVIS", greeting)
             speak(greeting)
