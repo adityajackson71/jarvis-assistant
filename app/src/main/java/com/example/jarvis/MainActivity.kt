@@ -36,6 +36,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private lateinit var tts: TextToSpeech
     private lateinit var actionHandler: ActionHandler
     private lateinit var apiHelper: ApiHelper
+    private lateinit var lgTvHelper: LgTvHelper
     private val client = OkHttpClient()
     private val prefs by lazy { getSharedPreferences("jarvis_prefs", MODE_PRIVATE) }
     private val conversation = JSONArray()
@@ -83,6 +84,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         setContentView(binding.root)
         actionHandler = ActionHandler(this)
         apiHelper = ApiHelper()
+        lgTvHelper = LgTvHelper(prefs)
 
         tts = TextToSpeech(this, this)
         tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
@@ -109,6 +111,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         binding.apiKeyInput.setText(prefs.getString("gemini_key", ""))
         binding.cityInput.setText(prefs.getString("city", ""))
         binding.youtubeKeyInput.setText(prefs.getString("youtube_key", ""))
+        binding.tvIpInput.setText(prefs.getString("tv_ip", ""))
+        binding.tvMacInput.setText(prefs.getString("tv_mac", ""))
 
         binding.settingsButton.setOnClickListener {
             binding.settingsPanel.visibility =
@@ -119,6 +123,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             prefs.edit()
                 .putString("city", binding.cityInput.text.toString().trim())
                 .putString("youtube_key", binding.youtubeKeyInput.text.toString().trim())
+                .putString("tv_ip", binding.tvIpInput.text.toString().trim())
+                .putString("tv_mac", binding.tvMacInput.text.toString().trim())
                 .apply()
             Toast.makeText(this, "Settings saved", Toast.LENGTH_SHORT).show()
         }
@@ -262,25 +268,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             return true
         }
 
-        // WhatsApp
-        Regex("^whatsapp (.+?) (?:saying|that says) (.+)$").find(lower)?.let { match ->
-            handleWhatsAppCommand(original, match.groupValues[1].trim(), match.groupValues[2])
-            return true
-        }
-        Regex("^(?:send|message|text) (.+?) (?:a whatsapp message |on whatsapp )(?:saying|that says) (.+)$").find(lower)?.let { match ->
-            handleWhatsAppCommand(original, match.groupValues[1].trim(), match.groupValues[2])
-            return true
-        }
-
-        // Instagram (open profile only — no auto-send exists)
-        Regex("^(?:message|open) (.+?) on instagram$").find(lower)?.let { match ->
-            val username = match.groupValues[1].trim()
-            actionHandler.openInstagramProfile(username)
-            appendToChat("JARVIS", "Opened $username's Instagram profile, Sir. I can't send DMs automatically — you'll need to type the message yourself.")
-            speak("Opened their profile, Sir. You'll need to send the message yourself.")
-            return true
-        }
-
         // Message / SMS
         Regex("^(?:send|message|text) ([a-zA-Z ]+?) (?:a message |a text )?(?:saying|that says) (.+)$").find(lower)?.let { match ->
             val name = match.groupValues[1].trim()
@@ -353,7 +340,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             return true
         }
 
-        // Weather (via Gemini web search, no separate API key)
+        // Weather (via Gemini web search)
         if (Regex("^(?:what'?s the )?weather(?: today)?$").matches(lower)) {
             val city = prefs.getString("city", "") ?: ""
             val geminiKey = prefs.getString("gemini_key", "") ?: ""
@@ -373,7 +360,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             return true
         }
 
-        // News (via Gemini web search, no separate API key)
+        // News (via Gemini web search)
         if (Regex("^(?:check |get |what'?s the )?news$").matches(lower)) {
             val geminiKey = prefs.getString("gemini_key", "") ?: ""
             CoroutineScope(Dispatchers.Main).launch {
@@ -388,7 +375,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             return true
         }
 
-        // Time (local device clock, no API needed)
+        // Time (local device clock)
         if (Regex("^what(?:'s| is) the time$").matches(lower)) {
             val fmt = SimpleDateFormat("h:mm a", Locale.getDefault())
             val reply = "It's ${fmt.format(Date())}, Sir."
@@ -404,6 +391,84 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             actionHandler.openMapsDirections(destination, origin)
             appendToChat("JARVIS", "Opening directions to $destination, Sir.")
             speak("Opening directions in Maps.")
+            return true
+        }
+
+        // LG TV control
+        if (Regex("^(?:pair|connect) (?:the )?(?:tv|television)$").matches(lower)) {
+            val ip = prefs.getString("tv_ip", "") ?: ""
+            if (ip.isBlank()) {
+                appendToChat("JARVIS", "Please set your TV's IP address in Settings (⚙) first, Sir.")
+                return true
+            }
+            appendToChat("JARVIS", "Pairing with your TV — please accept the prompt on screen, Sir.")
+            speak("Pairing with your TV. Please accept the prompt on screen.")
+            lgTvHelper.pairAndConnect(ip) { success, message ->
+                runOnUiThread {
+                    appendToChat("JARVIS", message)
+                    speak(if (success) "TV paired, Sir." else "Pairing failed, Sir.")
+                }
+            }
+            return true
+        }
+
+        Regex("^turn (on|off) (?:the )?(?:tv|television)$").find(lower)?.let { match ->
+            val ip = prefs.getString("tv_ip", "") ?: ""
+            val mac = prefs.getString("tv_mac", "") ?: ""
+            if (match.groupValues[1] == "on") {
+                if (mac.isBlank()) {
+                    appendToChat("JARVIS", "Please set your TV's MAC address in Settings for power-on, Sir.")
+                    return true
+                }
+                CoroutineScope(Dispatchers.Main).launch {
+                    val sent = withContext(Dispatchers.IO) { lgTvHelper.wakeOnLan(mac) }
+                    appendToChat("JARVIS", if (sent) "Sent wake signal to the TV, Sir." else "Couldn't send wake signal, Sir.")
+                    speak(if (sent) "Turning on the TV, Sir." else "Couldn't reach the TV, Sir.")
+                }
+            } else {
+                if (ip.isBlank()) {
+                    appendToChat("JARVIS", "Please set your TV's IP address in Settings first, Sir.")
+                    return true
+                }
+                lgTvHelper.sendCommand(ip, "ssap://system/turnOff") { success, _ ->
+                    runOnUiThread {
+                        appendToChat("JARVIS", if (success) "Turning off the TV, Sir." else "Couldn't reach the TV, Sir.")
+                        speak(if (success) "Turning off the TV, Sir." else "Couldn't reach the TV, Sir.")
+                    }
+                }
+            }
+            return true
+        }
+
+        Regex("^volume (up|down) (?:on )?(?:the )?(?:tv|television)$").find(lower)?.let { match ->
+            val ip = prefs.getString("tv_ip", "") ?: ""
+            if (ip.isBlank()) {
+                appendToChat("JARVIS", "Please set your TV's IP address in Settings first, Sir.")
+                return true
+            }
+            val uri = if (match.groupValues[1] == "up") "ssap://audio/volumeUp" else "ssap://audio/volumeDown"
+            lgTvHelper.sendCommand(ip, uri) { success, _ ->
+                runOnUiThread {
+                    if (success) appendToChat("JARVIS", "Adjusting TV volume, Sir.")
+                }
+            }
+            speak("Adjusting volume, Sir.")
+            return true
+        }
+
+        if (Regex("^mute (?:the )?(?:tv|television)$").matches(lower)) {
+            val ip = prefs.getString("tv_ip", "") ?: ""
+            if (ip.isBlank()) {
+                appendToChat("JARVIS", "Please set your TV's IP address in Settings first, Sir.")
+                return true
+            }
+            val payload = JSONObject().put("mute", true)
+            lgTvHelper.sendCommand(ip, "ssap://audio/setMute", payload) { success, _ ->
+                runOnUiThread {
+                    appendToChat("JARVIS", if (success) "TV muted, Sir." else "Couldn't reach the TV, Sir.")
+                }
+            }
+            speak("Muting the TV, Sir.")
             return true
         }
 
@@ -439,7 +504,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         return false
     }
-private fun handleWhatsAppCommand(original: String, name: String, matchedMessage: String) {
+
+    private fun handleWhatsAppCommand(original: String, name: String, matchedMessage: String) {
         val messageBody = original.substring(original.length - matchedMessage.length).trim()
         val contact = actionHandler.findContact(name)
         if (contact == null) {
@@ -452,6 +518,7 @@ private fun handleWhatsAppCommand(original: String, name: String, matchedMessage
             pendingConfirmation = { actionHandler.openWhatsAppChat(number, messageBody) }
         }
     }
+
     private fun playOnYoutube(query: String) {
         val key = prefs.getString("youtube_key", "") ?: ""
         if (key.isBlank()) {
