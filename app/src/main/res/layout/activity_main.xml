@@ -89,6 +89,24 @@
             android:textColor="@color/jarvis_text"
             android:fontFamily="monospace" />
 
+        <EditText
+            android:id="@+id/tvIpInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="TV IP address"
+            android:textColorHint="@color/jarvis_text_dim"
+            android:textColor="@color/jarvis_text"
+            android:fontFamily="monospace" />
+
+        <EditText
+            android:id="@+id/tvMacInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="TV MAC address (for power-on)"
+            android:textColorHint="@color/jarvis_text_dim"
+            android:textColor="@color/jarvis_text"
+            android:fontFamily="monospace" />
+
         <Button
             android:id="@+id/saveSettingsButton"
             android:layout_width="match_parent"
