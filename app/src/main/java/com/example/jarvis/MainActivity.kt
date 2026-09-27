@@ -106,11 +106,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             }
         })
 
-        binding.apiKeyInput.setText(prefs.getString("api_key", ""))
+        binding.apiKeyInput.setText(prefs.getString("gemini_key", ""))
         binding.cityInput.setText(prefs.getString("city", ""))
         binding.youtubeKeyInput.setText(prefs.getString("youtube_key", ""))
-        binding.weatherKeyInput.setText(prefs.getString("weather_key", ""))
-        binding.newsKeyInput.setText(prefs.getString("news_key", ""))
 
         binding.settingsButton.setOnClickListener {
             binding.settingsPanel.visibility =
@@ -121,16 +119,14 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             prefs.edit()
                 .putString("city", binding.cityInput.text.toString().trim())
                 .putString("youtube_key", binding.youtubeKeyInput.text.toString().trim())
-                .putString("weather_key", binding.weatherKeyInput.text.toString().trim())
-                .putString("news_key", binding.newsKeyInput.text.toString().trim())
                 .apply()
             Toast.makeText(this, "Settings saved", Toast.LENGTH_SHORT).show()
         }
 
         binding.saveKeyButton.setOnClickListener {
             val key = binding.apiKeyInput.text.toString().trim()
-            prefs.edit().putString("api_key", key).apply()
-            Toast.makeText(this, "API key saved", Toast.LENGTH_SHORT).show()
+            prefs.edit().putString("gemini_key", key).apply()
+            Toast.makeText(this, "Gemini key saved", Toast.LENGTH_SHORT).show()
         }
 
         binding.sendButton.setOnClickListener {
@@ -222,7 +218,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         if (tryHandleCommand(text, lower)) return
 
-        sendToClaude(text)
+        sendToGemini(text)
     }
 
     private fun hasPhonePermissions(): Boolean {
@@ -302,8 +298,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         // Music: YouTube (auto-play first result)
         Regex("^play (.+?) (?:on|in) youtube$").find(lower)?.let { match ->
-            val query = match.groupValues[1].trim()
-            playOnYoutube(query)
+            playOnYoutube(match.groupValues[1].trim())
             return true
         }
         Regex("^search(?: on)? youtube(?: for)? (.+)$").find(lower)?.let { match ->
@@ -320,34 +315,42 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             return true
         }
 
-        // Weather
+        // Weather (via Gemini web search, no separate API key)
         if (Regex("^(?:what'?s the )?weather(?: today)?$").matches(lower)) {
             val city = prefs.getString("city", "") ?: ""
-            val key = prefs.getString("weather_key", "") ?: ""
+            val geminiKey = prefs.getString("gemini_key", "") ?: ""
             if (city.isBlank()) {
                 appendToChat("JARVIS", "Please set your city in Settings (⚙) first, Sir.")
                 return true
             }
             CoroutineScope(Dispatchers.Main).launch {
-                val reply = withContext(Dispatchers.IO) { apiHelper.getWeather(city, key) }
+                binding.statusRing.setState(StatusRingView.State.THINKING)
+                val prompt = "Search the web and tell me the current weather in $city right now. " +
+                    "One short sentence with temperature in Celsius and conditions."
+                val reply = withContext(Dispatchers.IO) { apiHelper.askGeminiWithSearch(prompt, geminiKey) }
+                binding.statusRing.setState(StatusRingView.State.IDLE)
                 appendToChat("JARVIS", reply)
                 speak(reply)
             }
             return true
         }
 
-        // News
+        // News (via Gemini web search, no separate API key)
         if (Regex("^(?:check |get |what'?s the )?news$").matches(lower)) {
-            val key = prefs.getString("news_key", "") ?: ""
+            val geminiKey = prefs.getString("gemini_key", "") ?: ""
             CoroutineScope(Dispatchers.Main).launch {
-                val reply = withContext(Dispatchers.IO) { apiHelper.getNews(key) }
+                binding.statusRing.setState(StatusRingView.State.THINKING)
+                val prompt = "Search the web and give me today's top 5 current news headlines, " +
+                    "as a short numbered list, no extra commentary."
+                val reply = withContext(Dispatchers.IO) { apiHelper.askGeminiWithSearch(prompt, geminiKey) }
+                binding.statusRing.setState(StatusRingView.State.IDLE)
                 appendToChat("JARVIS", reply)
                 speak("Here are today's top headlines, Sir.")
             }
             return true
         }
 
-        // Time
+        // Time (local device clock, no API needed)
         if (Regex("^what(?:'s| is) the time$").matches(lower)) {
             val fmt = SimpleDateFormat("h:mm a", Locale.getDefault())
             val reply = "It's ${fmt.format(Date())}, Sir."
@@ -423,12 +426,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
     }
 
-    // ---------- LLM chat ----------
+    // ---------- LLM chat (Gemini) ----------
 
-    private fun sendToClaude(userText: String) {
-        val apiKey = prefs.getString("api_key", "") ?: ""
+    private fun sendToGemini(userText: String) {
+        val apiKey = prefs.getString("gemini_key", "") ?: ""
         if (apiKey.isBlank()) {
-            appendToChat("JARVIS", "Please paste and save your Claude API key first.")
+            appendToChat("JARVIS", "Please paste and save your Gemini API key first.")
             return
         }
 
@@ -438,36 +441,54 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         binding.statusLabel.text = "PROCESSING"
 
         CoroutineScope(Dispatchers.Main).launch {
-            val reply = withContext(Dispatchers.IO) { callClaude(apiKey) }
+            val reply = withContext(Dispatchers.IO) { callGemini(apiKey) }
             appendToChat("JARVIS", reply)
             conversation.put(JSONObject().apply { put("role", "assistant"); put("content", reply) })
             speak(reply)
         }
     }
 
-    private fun callClaude(apiKey: String): String {
+    private fun callGemini(apiKey: String): String {
         return try {
-            val messagesArray = JSONArray()
-            for (i in 0 until conversation.length()) messagesArray.put(conversation.get(i))
+            val contentsArray = JSONArray()
+            for (i in 0 until conversation.length()) {
+                val turn = conversation.getJSONObject(i)
+                val role = if (turn.getString("role") == "assistant") "model" else "user"
+                contentsArray.put(
+                    JSONObject().apply {
+                        put("role", role)
+                        put("parts", JSONArray().put(JSONObject().put("text", turn.getString("content"))))
+                    }
+                )
+            }
 
             val bodyJson = JSONObject().apply {
-                put("model", "claude-sonnet-5")
-                put("max_tokens", 1024)
                 put(
-                    "system",
-                    "You are JARVIS, a calm, precise, slightly witty personal AI assistant, in the style of " +
-                        "Tony Stark's assistant. Address the user as 'Sir' unless told otherwise. Keep spoken " +
-                        "replies concise and natural, like a real conversation. You can also thoughtfully " +
-                        "discuss business ideas and general advice when asked, since the user's father may " +
-                        "use you for that too."
+                    "system_instruction",
+                    JSONObject().apply {
+                        put(
+                            "parts",
+                            JSONArray().put(
+                                JSONObject().put(
+                                    "text",
+                                    "You are JARVIS, a calm, precise, slightly witty personal AI assistant, in the " +
+                                        "style of Tony Stark's assistant. Address the user as 'Sir' unless told " +
+                                        "otherwise. Keep spoken replies concise and natural, like a real " +
+                                        "conversation. You can also thoughtfully discuss business ideas and general " +
+                                        "advice when asked. Use web search when a question needs current " +
+                                        "information such as news, dates, or festivals."
+                                )
+                            )
+                        )
+                    }
                 )
-                put("messages", messagesArray)
+                put("contents", contentsArray)
+                put("tools", JSONArray().put(JSONObject().put("google_search", JSONObject())))
             }
 
             val request = Request.Builder()
-                .url("https://api.anthropic.com/v1/messages")
-                .addHeader("x-api-key", apiKey)
-                .addHeader("anthropic-version", "2023-06-01")
+                .url("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent")
+                .addHeader("x-goog-api-key", apiKey)
                 .addHeader("content-type", "application/json")
                 .post(bodyJson.toString().toRequestBody("application/json".toMediaType()))
                 .build()
@@ -475,8 +496,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             client.newCall(request).execute().use { response ->
                 val responseBody = response.body?.string() ?: ""
                 if (!response.isSuccessful) return "Error ${response.code}: $responseBody"
-                val content = JSONObject(responseBody).getJSONArray("content")
-                content.getJSONObject(0).getString("text")
+                val json = JSONObject(responseBody)
+                val candidates = json.getJSONArray("candidates")
+                val parts = candidates.getJSONObject(0).getJSONObject("content").getJSONArray("parts")
+                parts.getJSONObject(0).getString("text")
             }
         } catch (e: Exception) {
             "Error reaching JARVIS's brain: ${e.message}"
