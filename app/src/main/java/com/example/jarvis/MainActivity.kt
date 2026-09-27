@@ -439,7 +439,19 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         return false
     }
-
+private fun handleWhatsAppCommand(original: String, name: String, matchedMessage: String) {
+        val messageBody = original.substring(original.length - matchedMessage.length).trim()
+        val contact = actionHandler.findContact(name)
+        if (contact == null) {
+            appendToChat("JARVIS", "I couldn't find $name in your contacts, Sir.")
+            speak("I couldn't find $name in your contacts, Sir.")
+        } else {
+            val (foundName, number) = contact
+            appendToChat("JARVIS", "Ready to open WhatsApp for $foundName: '$messageBody'. Should I open it?")
+            speak("Ready to open WhatsApp for $foundName. Should I proceed?")
+            pendingConfirmation = { actionHandler.openWhatsAppChat(number, messageBody) }
+        }
+    }
     private fun playOnYoutube(query: String) {
         val key = prefs.getString("youtube_key", "") ?: ""
         if (key.isBlank()) {
