@@ -243,6 +243,44 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             return true
         }
 
+        // WhatsApp
+        Regex("^whatsapp (.+?) (?:saying|that says) (.+)$").find(lower)?.let { match ->
+            handleWhatsAppCommand(original, match.groupValues[1].trim(), match.groupValues[2])
+            return true
+        }
+        Regex("^(?:send|message|text) (.+?) (?:a whatsapp message |on whatsapp )(?:saying|that says) (.+)$").find(lower)?.let { match ->
+            handleWhatsAppCommand(original, match.groupValues[1].trim(), match.groupValues[2])
+            return true
+        }
+
+        // Instagram (open profile only — no auto-send exists)
+        Regex("^(?:message|open) (.+?) on instagram$").find(lower)?.let { match ->
+            val username = match.groupValues[1].trim()
+            actionHandler.openInstagramProfile(username)
+            appendToChat("JARVIS", "Opened $username's Instagram profile, Sir. I can't send DMs automatically — you'll need to type the message yourself.")
+            speak("Opened their profile, Sir. You'll need to send the message yourself.")
+            return true
+        }
+
+        // WhatsApp
+        Regex("^whatsapp (.+?) (?:saying|that says) (.+)$").find(lower)?.let { match ->
+            handleWhatsAppCommand(original, match.groupValues[1].trim(), match.groupValues[2])
+            return true
+        }
+        Regex("^(?:send|message|text) (.+?) (?:a whatsapp message |on whatsapp )(?:saying|that says) (.+)$").find(lower)?.let { match ->
+            handleWhatsAppCommand(original, match.groupValues[1].trim(), match.groupValues[2])
+            return true
+        }
+
+        // Instagram (open profile only — no auto-send exists)
+        Regex("^(?:message|open) (.+?) on instagram$").find(lower)?.let { match ->
+            val username = match.groupValues[1].trim()
+            actionHandler.openInstagramProfile(username)
+            appendToChat("JARVIS", "Opened $username's Instagram profile, Sir. I can't send DMs automatically — you'll need to type the message yourself.")
+            speak("Opened their profile, Sir. You'll need to send the message yourself.")
+            return true
+        }
+
         // Message / SMS
         Regex("^(?:send|message|text) ([a-zA-Z ]+?) (?:a message |a text )?(?:saying|that says) (.+)$").find(lower)?.let { match ->
             val name = match.groupValues[1].trim()
