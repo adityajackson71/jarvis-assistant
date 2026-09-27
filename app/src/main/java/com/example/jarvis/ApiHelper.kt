@@ -1,51 +1,47 @@
 package com.example.jarvis
 
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URLEncoder
 
 class ApiHelper {
     private val client = OkHttpClient()
 
-    fun getWeather(city: String, apiKey: String): String {
-        if (apiKey.isBlank()) return "Please save a weather API key in Settings first, Sir."
+    fun askGeminiWithSearch(prompt: String, apiKey: String): String {
+        if (apiKey.isBlank()) return "Please save your Gemini API key first, Sir."
         return try {
-            val url = "https://api.openweathermap.org/data/2.5/weather?q=" +
-                URLEncoder.encode(city, "UTF-8") + "&appid=$apiKey&units=metric"
-            val request = Request.Builder().url(url).build()
+            val bodyJson = JSONObject().apply {
+                put(
+                    "contents",
+                    JSONArray().put(
+                        JSONObject().apply {
+                            put("role", "user")
+                            put("parts", JSONArray().put(JSONObject().put("text", prompt)))
+                        }
+                    )
+                )
+                put("tools", JSONArray().put(JSONObject().put("google_search", JSONObject())))
+            }
+            val request = Request.Builder()
+                .url("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent")
+                .addHeader("x-goog-api-key", apiKey)
+                .addHeader("content-type", "application/json")
+                .post(bodyJson.toString().toRequestBody("application/json".toMediaType()))
+                .build()
             client.newCall(request).execute().use { response ->
                 val body = response.body?.string() ?: ""
-                if (!response.isSuccessful) return "Couldn't get weather right now (error ${response.code})."
+                if (!response.isSuccessful) return "Error ${response.code}: $body"
                 val json = JSONObject(body)
-                val temp = json.getJSONObject("main").getDouble("temp")
-                val desc = json.getJSONArray("weather").getJSONObject(0).getString("description")
-                val cityName = json.getString("name")
-                "It's currently $temp°C with $desc in $cityName, Sir."
+                val candidates = json.getJSONArray("candidates")
+                val parts = candidates.getJSONObject(0).getJSONObject("content").getJSONArray("parts")
+                parts.getJSONObject(0).getString("text")
             }
         } catch (e: Exception) {
-            "I couldn't reach the weather service, Sir: ${e.message}"
-        }
-    }
-
-    fun getNews(apiKey: String): String {
-        return try {
-            val url = "https://newsapi.org/v2/top-headlines?country=in&pageSize=5&apiKey=$apiKey"
-            val request = Request.Builder().url(url).build()
-            client.newCall(request).execute().use { response ->
-                val body = response.body?.string() ?: ""
-                if (!response.isSuccessful) return "Couldn't fetch news right now (error ${response.code})."
-                val json = JSONObject(body)
-                val articles = json.getJSONArray("articles")
-                if (articles.length() == 0) return "No headlines found right now, Sir."
-                val builder = StringBuilder("Top headlines, Sir:\n")
-                for (i in 0 until minOf(5, articles.length())) {
-                    builder.append("${i + 1}. ${articles.getJSONObject(i).getString("title")}\n")
-                }
-                builder.toString()
-            }
-        } catch (e: Exception) {
-            "I couldn't reach the news service, Sir: ${e.message}"
+            "I couldn't reach the search service, Sir: ${e.message}"
         }
     }
 
