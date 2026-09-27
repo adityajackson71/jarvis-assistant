@@ -89,24 +89,6 @@
             android:textColor="@color/jarvis_text"
             android:fontFamily="monospace" />
 
-        <EditText
-            android:id="@+id/weatherKeyInput"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="Weather API key"
-            android:textColorHint="@color/jarvis_text_dim"
-            android:textColor="@color/jarvis_text"
-            android:fontFamily="monospace" />
-
-        <EditText
-            android:id="@+id/newsKeyInput"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="News API key"
-            android:textColorHint="@color/jarvis_text_dim"
-            android:textColor="@color/jarvis_text"
-            android:fontFamily="monospace" />
-
         <Button
             android:id="@+id/saveSettingsButton"
             android:layout_width="match_parent"
@@ -189,7 +171,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:hint="Claude API key"
+            android:hint="Gemini API key"
             android:inputType="textPassword"
             android:textColorHint="@color/jarvis_text_dim"
             android:textColor="@color/jarvis_text"
