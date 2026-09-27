@@ -61,6 +61,16 @@
         android:fontFamily="monospace"
         android:layout_marginBottom="8dp" />
 
+    <Button
+        android:id="@+id/wakeToggleButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="🎙 HEY JARVIS: OFF"
+        android:textColor="@color/jarvis_cyan"
+        android:backgroundTint="@color/jarvis_bg_panel"
+        android:fontFamily="monospace"
+        android:layout_marginBottom="8dp" />
+
     <LinearLayout
         android:id="@+id/settingsPanel"
         android:layout_width="match_parent"
