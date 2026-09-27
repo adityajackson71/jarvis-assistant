@@ -132,4 +132,22 @@ class ActionHandler(private val context: Context) {
         intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
         context.startActivity(intent)
     }
+
+    fun openWhatsAppChat(number: String, message: String) {
+        val sanitized = number.replace(Regex("[^\\d+]"), "").removePrefix("+")
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$sanitized?text=" + Uri.encode(message)))
+        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        context.startActivity(intent)
+    }
+
+    fun openInstagramProfile(username: String) {
+        val cleanUsername = username.trim().removePrefix("@")
+        try {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("instagram://user?username=$cleanUsername"))
+            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            openUrl("https://instagram.com/$cleanUsername")
+        }
+    }
 }
