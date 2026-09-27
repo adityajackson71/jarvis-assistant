@@ -1,8 +1,10 @@
 package com.example.jarvis
 
 import android.Manifest
+import android.app.role.RoleManager
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -45,6 +47,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var pendingConfirmation: (() -> Unit)? = null
     private var pendingPermissionRetryText: String? = null
 
+    private var wakeWordListener: WakeWordListener? = null
+    private var wakeModeOn = false
+    private var pendingWakeModeStart = false
+
+    private var pendingCallScreeningMinutes: Int = 0
+    private var pendingCallScreeningMessage: String = ""
+
     private val clockRunnable = object : Runnable {
         override fun run() {
             val fmt = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
@@ -61,11 +70,20 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             val spokenText = results?.firstOrNull()
             if (!spokenText.isNullOrBlank()) processInput(spokenText)
         }
+        if (wakeModeOn) wakeWordListener?.start()
     }
 
     private val micPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) startVoiceInput()
-        else Toast.makeText(this, "Microphone permission is needed for voice input", Toast.LENGTH_SHORT).show()
+        if (granted) {
+            if (pendingWakeModeStart) {
+                pendingWakeModeStart = false
+                startWakeMode()
+            } else {
+                startVoiceInput()
+            }
+        } else {
+            Toast.makeText(this, "Microphone permission is needed for voice input", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private val phonePermissionsLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results ->
@@ -76,6 +94,14 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             appendToChat("JARVIS", "I need contacts, call, and SMS permissions to do that, Sir.")
         }
         pendingPermissionRetryText = null
+    }
+
+    private val callScreeningRoleLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == RESULT_OK) {
+            startCallScreening(pendingCallScreeningMinutes, pendingCallScreeningMessage)
+        } else {
+            appendToChat("JARVIS", "Call screening role wasn't granted, Sir — I can't manage calls without it.")
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -141,10 +167,29 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
 
         binding.micButton.setOnClickListener {
+            if (wakeModeOn) wakeWordListener?.stop()
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
                 == PackageManager.PERMISSION_GRANTED
             ) startVoiceInput()
             else micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+
+        binding.wakeToggleButton.setOnClickListener {
+            if (wakeModeOn) {
+                wakeWordListener?.stop()
+                wakeModeOn = false
+                binding.wakeToggleButton.text = "🎙 HEY JARVIS: OFF"
+                appendToChat("JARVIS", "Wake word listening stopped, Sir.")
+            } else {
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+                    == PackageManager.PERMISSION_GRANTED
+                ) {
+                    startWakeMode()
+                } else {
+                    pendingWakeModeStart = true
+                    micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                }
+            }
         }
 
         binding.stopButton.setOnClickListener {
@@ -157,10 +202,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     override fun onResume() {
         super.onResume()
         clockHandler.post(clockRunnable)
+        if (wakeModeOn) wakeWordListener?.start()
     }
 
     override fun onPause() {
         clockHandler.removeCallbacks(clockRunnable)
+        if (wakeModeOn) wakeWordListener?.stop()
         super.onPause()
     }
 
@@ -246,6 +293,29 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 speak("I found $foundName. Should I call them?")
                 pendingConfirmation = { actionHandler.makeCall(number) }
             }
+            return true
+        }
+
+        // Call screening (auto-decline + text reply — cannot speak into a live call)
+        Regex("^attend (?:my )?calls? for (\\d+) minutes? saying (.+)$").find(lower)?.let { match ->
+            val minutes = match.groupValues[1].toInt()
+            val rawMessage = original.substring(original.length - match.groupValues[2].length).trim()
+            val transformedMessage = rawMessage
+                .replace(Regex("(?i)\\bi am\\b"), "Sir is")
+                .replaceFirstChar { it.uppercase() }
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                appendToChat("JARVIS", "Call screening needs Android 10 or newer, Sir — this device doesn't support it.")
+                return true
+            }
+            val roleManager = getSystemService(RoleManager::class.java)
+            if (roleManager != null && !roleManager.isRoleHeld(RoleManager.ROLE_CALL_SCREENING)) {
+                appendToChat("JARVIS", "I need the Call Screening permission first — please allow it on the next screen, Sir.")
+                pendingCallScreeningMinutes = minutes
+                pendingCallScreeningMessage = transformedMessage
+                callScreeningRoleLauncher.launch(roleManager.createRequestRoleIntent(RoleManager.ROLE_CALL_SCREENING))
+                return true
+            }
+            startCallScreening(minutes, transformedMessage)
             return true
         }
 
@@ -412,6 +482,29 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             return true
         }
 
+        if (Regex("^(?:check|is) (?:the )?(?:tv|television)(?: connected| paired)?$").matches(lower)) {
+            val ip = prefs.getString("tv_ip", "") ?: ""
+            val hasKey = prefs.getString("tv_client_key", null) != null
+            if (ip.isBlank()) {
+                appendToChat("JARVIS", "No TV IP address set in Settings, Sir.")
+                return true
+            }
+            if (!hasKey) {
+                appendToChat("JARVIS", "The TV hasn't been paired yet, Sir. Say 'pair tv' first.")
+                speak("The TV hasn't been paired yet, Sir.")
+                return true
+            }
+            lgTvHelper.sendCommand(ip, "ssap://audio/getVolume") { success, _ ->
+                runOnUiThread {
+                    val message = if (success) "TV is paired and reachable right now, Sir."
+                    else "TV is paired, but I couldn't reach it right now, Sir — check it's powered on and on the same Wi-Fi."
+                    appendToChat("JARVIS", message)
+                    speak(if (success) "TV is connected, Sir." else "Couldn't reach the TV, Sir.")
+                }
+            }
+            return true
+        }
+
         Regex("^turn (on|off) (?:the )?(?:tv|television)$").find(lower)?.let { match ->
             val ip = prefs.getString("tv_ip", "") ?: ""
             val mac = prefs.getString("tv_mac", "") ?: ""
@@ -503,6 +596,16 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
 
         return false
+    }
+
+    private fun startCallScreening(minutes: Int, message: String) {
+        val endTime = System.currentTimeMillis() + minutes * 60_000L
+        prefs.edit()
+            .putLong("call_screen_end", endTime)
+            .putString("call_screen_message", message)
+            .apply()
+        appendToChat("JARVIS", "I'll handle calls for the next $minutes minutes, Sir — declining them and texting back: \"$message\"")
+        speak("Understood, Sir. I'll handle your calls for the next $minutes minutes.")
     }
 
     private fun handleWhatsAppCommand(original: String, name: String, matchedMessage: String) {
@@ -644,8 +747,32 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
     }
 
+    private fun startWakeMode() {
+        if (wakeWordListener == null) {
+            wakeWordListener = WakeWordListener(this) { remainder ->
+                runOnUiThread {
+                    wakeWordListener?.stop()
+                    if (remainder.isNotBlank()) {
+                        processInput(remainder)
+                        if (wakeModeOn) wakeWordListener?.start()
+                    } else {
+                        appendToChat("JARVIS", "Yes, Sir?")
+                        speak("Yes, Sir?")
+                        startVoiceInput()
+                    }
+                }
+            }
+        }
+        wakeWordListener?.start()
+        wakeModeOn = true
+        binding.wakeToggleButton.text = "🎙 HEY JARVIS: ON"
+        appendToChat("JARVIS", "Listening for 'Hey JARVIS', Sir. Keep the app open on screen.")
+        speak("Wake word listening active, Sir.")
+    }
+
     override fun onDestroy() {
         clockHandler.removeCallbacks(clockRunnable)
+        wakeWordListener?.stop()
         tts.stop()
         tts.shutdown()
         super.onDestroy()
