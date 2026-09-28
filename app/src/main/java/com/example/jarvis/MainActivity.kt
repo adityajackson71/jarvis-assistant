@@ -295,7 +295,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             }
             return true
         }
-
+       // Stop call screening early
+        if (Regex("^(?:stop|cancel|turn off) (?:attending|screening) (?:my )?calls?$").matches(lower)) {
+            prefs.edit().putLong("call_screen_end", 0L).apply()
+            appendToChat("JARVIS", "Stopped handling your calls, Sir. Everything's back to normal.")
+            speak("Stopped handling your calls, Sir.")
+            return true
+        }
         // Call screening (auto-decline + text reply — cannot speak into a live call)
         Regex("^attend (?:my )?calls? for (\\d+) minutes? saying (.+)$").find(lower)?.let { match ->
             val minutes = match.groupValues[1].toInt()
