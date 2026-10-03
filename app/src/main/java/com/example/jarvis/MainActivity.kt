@@ -295,6 +295,41 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             }
             return true
         }
+        // Block / unblock specific callers
+        Regex("^block (?:calls from |calls )?(.+)$").find(lower)?.let { match ->
+            val name = match.groupValues[1].trim()
+            val contact = actionHandler.findContact(name)
+            if (contact == null) {
+                appendToChat("JARVIS", "I couldn't find $name in your contacts, Sir.")
+                speak("I couldn't find $name in your contacts, Sir.")
+            } else {
+                val (foundName, number) = contact
+                val normalized = PhoneUtils.normalize(number)
+                val current = prefs.getStringSet("blocked_numbers", emptySet())?.toMutableSet() ?: mutableSetOf()
+                current.add(normalized)
+                prefs.edit().putStringSet("blocked_numbers", current).apply()
+                appendToChat("JARVIS", "Blocked calls from $foundName, Sir.")
+                speak("Blocked calls from $foundName, Sir.")
+            }
+            return true
+        }
+        Regex("^unblock (?:calls from |calls )?(.+)$").find(lower)?.let { match ->
+            val name = match.groupValues[1].trim()
+            val contact = actionHandler.findContact(name)
+            if (contact == null) {
+                appendToChat("JARVIS", "I couldn't find $name in your contacts, Sir.")
+                speak("I couldn't find $name in your contacts, Sir.")
+            } else {
+                val (foundName, number) = contact
+                val normalized = PhoneUtils.normalize(number)
+                val current = prefs.getStringSet("blocked_numbers", emptySet())?.toMutableSet() ?: mutableSetOf()
+                current.remove(normalized)
+                prefs.edit().putStringSet("blocked_numbers", current).apply()
+                appendToChat("JARVIS", "Unblocked calls from $foundName, Sir.")
+                speak("Unblocked calls from $foundName, Sir.")
+            }
+            return true
+        } 
        // Stop call screening early
         if (Regex("^(?:stop|cancel|turn off) (?:attending|screening) (?:my )?calls?$").matches(lower)) {
             prefs.edit().putLong("call_screen_end", 0L).apply()
