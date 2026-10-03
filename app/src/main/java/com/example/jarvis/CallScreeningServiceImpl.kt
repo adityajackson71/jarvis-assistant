@@ -11,6 +11,19 @@ class CallScreeningServiceImpl : CallScreeningService() {
 
     override fun onScreenCall(callDetails: Call.Details) {
         val prefs = getSharedPreferences("jarvis_prefs", Context.MODE_PRIVATE)
+        val number = callDetails.handle?.schemeSpecificPart ?: ""
+        val normalizedCaller = PhoneUtils.normalize(number)
+
+        val blockedNumbers = prefs.getStringSet("blocked_numbers", emptySet()) ?: emptySet()
+        if (normalizedCaller.isNotBlank() && blockedNumbers.contains(normalizedCaller)) {
+            val response = CallResponse.Builder()
+                .setDisallowCall(true)
+                .setRejectCall(true)
+                .build()
+            respondToCall(callDetails, response)
+            return
+        }
+
         val endTime = prefs.getLong("call_screen_end", 0L)
         val now = System.currentTimeMillis()
 
@@ -25,9 +38,8 @@ class CallScreeningServiceImpl : CallScreeningService() {
             .build()
         respondToCall(callDetails, response)
 
-        val number = callDetails.handle?.schemeSpecificPart
         val message = prefs.getString("call_screen_message", "Sir is busy right now.") ?: "Sir is busy right now."
-        if (!number.isNullOrBlank()) {
+        if (number.isNotBlank()) {
             try {
                 val smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     getSystemService(SmsManager::class.java)
